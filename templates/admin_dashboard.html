@@ -1,0 +1,214 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard - Triple Auth{% endblock %}
+
+{% block nav %}
+<button class="btn btn-sm btn-outline" onclick="adminLogout()">Logout</button>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <h2>Admin Dashboard</h2>
+
+    <div class="tabs">
+        <button class="tab" data-tab="tickets">Tickets</button>
+        <button class="tab active" data-tab="users">Users</button>
+        <button class="tab" data-tab="events">Security Events</button>
+        <button class="tab" data-tab="recovery">Account Recovery</button>
+        <button class="tab" data-tab="settings">Settings</button>
+        <!-- NEW -> 
+        <button class="tab" data-tab="token"
+    </div>
+
+    <!-- TICKETS TAB -->
+        <div class="tab-content" id="tab-tickets">
+            <div class="tab-header">
+                <h3>New User Tickets</h3>
+                <span id="ticket-count" class="status-badge badge-warning" style="display:none;"></span>
+            </div>
+            <div id="tickets-empty" style="display:none;">
+                <p style="color: var(--text-muted);">No pending tickets.</p>
+            </div>
+            <table class="data-table" id="tickets-table" style="display:none;">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Description</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tickets-body"></tbody>
+            </table>
+        </div>
+
+        <!-- USERS TAB -->
+        <div class="tab-content active" id="tab-users">
+            <div class="tab-header">
+                <h3>User Management</h3>
+                <button class="btn btn-primary btn-sm" onclick="showCreateModal()">Create User</button>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Status</th>
+                        <th>Failed A</th>
+                        <th>Failed B</th>
+                        <th>First Login</th>
+                        <th>Admin</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="users-body"></tbody>
+            </table>
+        </div>
+
+        <!-- EVENTS TAB -->
+        <div class="tab-content" id="tab-events">
+            <div class="tab-header">
+                <h3>Security Events</h3>
+                <select id="event-filter" onchange="loadEvents()">
+                    <option value="">All Events</option>
+                    <option value="A_FAIL">A Failures</option>
+                    <option value="A_LOCKOUT">A Lockouts</option>
+                    <option value="B_FAIL">B Failures</option>
+                    <option value="LOGIN_SUCCESS">Successful Logins</option>
+                    <option value="PASSWORD_RESET">Password Resets</option>
+                    <option value="PASSWORD_CHANGED">Password Changes</option>
+                    <option value="RECOVERY">Recoveries</option>
+                    <option value="USER_CREATED">New Users</option>
+                    <option value="DUMMY_REUSE">Dummy Password Reuse</option>
+                </select>
+            </div>
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>User</th>
+                        <th>Event</th>
+                        <th>Description</th>
+                        <th>IP</th>
+                    </tr>
+                </thead>
+                <tbody id="events-body"></tbody>
+            </table>
+        </div>
+
+        <!-- RECOVERY TAB -->
+        <div class="tab-content" id="tab-recovery">
+            <h3>Account Recovery</h3>
+            <div class="recovery-panel">
+                <div class="form-group">
+                    <label for="recovery-user">Select User (locked accounts shown first)</label>
+                    <select id="recovery-user"></select>
+                </div>
+                <div class="form-group">
+                    <label for="recovery-token">Token C</label>
+                    <input type="text" id="recovery-token" placeholder="Enter the user's recovery token">
+                </div>
+                <button class="btn btn-primary" onclick="verifyToken()">Verify Token</button>
+                <div id="token-result" style="display:none;"></div>
+
+                <div id="reset-form" style="display:none;">
+                    <hr>
+                    <h4>Reset Passwords</h4>
+                    <div class="form-group">
+                        <label for="new-a">New Password A</label>
+                        <input type="password" id="new-a" placeholder="Min 8 characters">
+                    </div>
+                    <div class="form-group">
+                        <label for="new-b">New Password B</label>
+                        <input type="password" id="new-b" placeholder="Verification password">
+                    </div>
+                    <button class="btn btn-primary" onclick="resetUser()">Reset & Unlock</button>
+                    <div id="reset-result" style="display:none;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SETTINGS TAB -->
+        <div class="tab-content" id="tab-settings">
+            <h3>Settings</h3>
+            <div class="settings-panel">
+                <div class="settings-section">
+                    <h4>Authentication</h4>
+                    <div class="form-group">
+                        <label for="set-max-a-attempts">Max Failed A Attempts Before Lockout</label>
+                        <input type="number" id="set-max-a-attempts" min="1" max="99">
+                    </div>
+                    <div class="form-group">
+                        <label for="set-max-b-attempts">Max Failed B Attempts Before Alert</label>
+                        <input type="number" id="set-max-b-attempts" min="1" max="99">
+                    </div>
+                </div>
+                <div class="settings-section">
+                    <h4>Email Notifications (SMTP)</h4>
+                    <div class="form-group">
+                        <label>
+                            <input type="checkbox" id="set-smtp-enabled"> Enable Email Notifications
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label for="set-smtp-server">SMTP Server</label>
+                        <input type="text" id="set-smtp-server">
+                    </div>
+                    <div class="form-group">
+                        <label for="set-smtp-port">SMTP Port</label>
+                        <input type="number" id="set-smtp-port">
+                    </div>
+                    <div class="form-group">
+                        <label for="set-smtp-username">SMTP Username</label>
+                        <input type="text" id="set-smtp-username">
+                    </div>
+                    <div class="form-group">
+                        <label for="set-smtp-password">SMTP Password</label>
+                        <input type="password" id="set-smtp-password">
+                    </div>
+                    <div class="form-group">
+                        <label for="set-smtp-from">From Email</label>
+                        <input type="email" id="set-smtp-from">
+                    </div>
+                    <div class="form-group">
+                        <label for="set-admin-email">Admin Notification Email</label>
+                        <input type="email" id="set-admin-email">
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+                <div id="settings-result" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- CREATE USER MODAL -->
+    <div class="modal-overlay" id="create-modal" style="display:none;">
+        <div class="modal">
+            <h3>Create User</h3>
+            <div class="form-group">
+                <label for="new-username">Username</label>
+                <input type="text" id="new-username" placeholder="Alphanumeric + underscore">
+            </div>
+            <div class="form-group">
+                <label for="new-email">Email</label>
+                <input type="email" id="new-email">
+            </div>
+            <div class="form-group">
+                <label for="new-pass-b">Password B</label>
+                <input type="password" id="new-pass-b">
+            </div>
+            <p class="auth-subtitle">Password A will be auto-generated as a one-time temporary password.</p>
+            <div id="create-error" class="error-msg" style="display:none;"></div>
+            <div id="create-success" style="display:none;"></div>
+            <div class="modal-actions">
+                <button class="btn btn-outline" onclick="hideCreateModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="createUser()">Create</button>
+            </div>
+        </div>
+    </div>
+    {% endblock %}
+
+    {% block scripts %}
+    <script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+    {% endblock %}

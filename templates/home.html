@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Home - Triple Auth{% endblock %}
+
+{% block nav %}
+<button class="btn btn-sm btn-outline" onclick="logout()">Logout</button>
+{% endblock %}
+
+{% block content %}
+<div class="welcome-card">
+    <h2>Welcome, {{ user['username'] }}</h2>
+    <p>Your account is secured with Triple Authentication.</p>
+    <div class="status-badge badge-active">Authenticated</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    window.location.href = '/login';
+}
+</script>
+{% endblock %}

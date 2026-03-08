@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Admin Login - Triple Auth{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+    <h2>Admin Login</h2>
+    <p class="auth-subtitle">Full authentication required</p>
+
+    <form id="admin-form" onsubmit="return false;">
+        <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required autofocus>
+        </div>
+        <div class="form-group">
+            <label for="password_a">Password A</label>
+            <input type="password" id="password_a" name="password_a" required>
+        </div>
+        <div class="form-group">
+            <label for="password_b">Password B</label>
+            <input type="password" id="password_b" name="password_b" required>
+        </div>
+        <div id="error-admin" class="error-msg" style="display:none;"></div>
+        <button type="submit" class="btn btn-primary btn-full" id="btn-admin">Sign In</button>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('admin-form').addEventListener('submit', async () => {
+    const btn = document.getElementById('btn-admin');
+    const errorEl = document.getElementById('error-admin');
+    btn.disabled = true;
+    errorEl.style.display = 'none';
+
+    try {
+        const res = await fetch('/api/admin/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: document.getElementById('username').value,
+                password_a: document.getElementById('password_a').value,
+                password_b: document.getElementById('password_b').value,
+            }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            window.location.href = data.redirect;
+        } else {
+            errorEl.textContent = data.error;
+            errorEl.style.display = 'block';
+            if (data.locked) window.location.href = '/locked';
+        }
+    } catch {
+        errorEl.textContent = 'Connection error';
+        errorEl.style.display = 'block';
+    }
+    btn.disabled = false;
+});
+</script>
+{% endblock %}

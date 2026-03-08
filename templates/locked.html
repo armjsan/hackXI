@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}Account Locked - Triple Auth{% endblock %}
+
+{% block content %}
+<div class="auth-card locked-card">
+    <div class="lock-icon">&#x1f512;</div>
+    <h2>Account Locked</h2>
+    <p>Your account has been locked due to security concerns.</p>
+    <p>To restore access:</p>
+    <ol class="recovery-steps">
+        <li>Contact your administrator by phone or email</li>
+        <li>Provide your <strong>Token C</strong> (recovery token) as proof of identity</li>
+        <li>Your administrator will reset your passwords and provide new credentials</li>
+    </ol>
+    <a href="/login" class="btn btn-outline btn-full">Back to Login</a>
+</div>
+{% endblock %}

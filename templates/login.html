@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Login - Triple Auth{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+    <h2>Sign In</h2>
+    <p class="auth-subtitle">Two-factor authentication required</p>
+
+    <div id="phase-a">
+        <form id="form-a" onsubmit="return false;">
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required autocomplete="username" autofocus>
+            </div>
+            <div class="form-group">
+                <label for="password_a">Password</label>
+                <input type="password" id="password_a" name="password_a" required autocomplete="current-password">
+            </div>
+            <div id="error-a" class="error-msg" style="display:none;"></div>
+            <button type="submit" class="btn btn-primary btn-full" id="btn-a">Sign In</button>
+        </form>
+    </div>
+
+    <div id="phase-b" style="display:none;">
+        <div class="phase-b-header">
+            <p>Step 2: Enter the verification password provided by your administrator.</p>
+        </div>
+        <form id="form-b" onsubmit="return false;">
+            <div class="form-group">
+                <label for="password_b">Verification Password</label>
+                <input type="password" id="password_b" name="password_b" required autofocus>
+            </div>
+            <div id="error-b" class="error-msg" style="display:none;"></div>
+            <button type="submit" class="btn btn-primary btn-full" id="btn-b">Verify</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/login.js') }}"></script>
+{% endblock %}
