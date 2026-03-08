@@ -33,6 +33,8 @@ def init_db():
             password_b_salt     TEXT    NOT NULL,
             password_b_plaintext TEXT,
             token_c             TEXT    NOT NULL,
+            token_c_salt        TEXT,
+            token_c_power       INTEGER,
             is_locked           INTEGER NOT NULL DEFAULT 0,
             failed_a_count      INTEGER NOT NULL DEFAULT 0,
             failed_b_count      INTEGER NOT NULL DEFAULT 0,

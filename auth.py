@@ -1,3 +1,6 @@
+import base64
+import hashlib
+import os
 import re
 import secrets
 import string
@@ -7,6 +10,59 @@ from database import (
     log_event, create_registration,
 )
 from key_manager import create_key, verify_key
+
+# ---------------------------------------------------------------------------
+# Matrix token derivation helpers
+# ---------------------------------------------------------------------------
+
+_MOD = (1 << 256) - 189  # large prime for modular arithmetic
+
+
+def _mat_mult_mod(A, B, mod):
+    n = len(A)
+    result = [[0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(n):
+            for k in range(n):
+                result[i][j] = (result[i][j] + A[i][k] * B[k][j]) % mod
+    return result
+
+
+def _mat_pow_mod(matrix, power, mod):
+    n = len(matrix)
+    result = [[1 if i == j else 0 for j in range(n)] for i in range(n)]
+    base = [row[:] for row in matrix]
+    while power > 0:
+        if power % 2 == 1:
+            result = _mat_mult_mod(result, base, mod)
+        base = _mat_mult_mod(base, base, mod)
+        power //= 2
+    return result
+
+
+def generate_matrix_token_c(password_a, password_b):
+    """
+    Derive Token C from Password A + Password B using matrix power.
+    Returns (token_c_hash, salt_b64, power).
+    """
+    salt = os.urandom(16)
+    n = secrets.randbelow(95) + 5  # random power 5-99
+
+    # Hash password_b with salt (mirrors original system_pw derivation)
+    salted_b = hashlib.sha256(salt + password_b.encode('utf-8')).hexdigest()
+
+    # Combine: first 8 of password_a + first 8 of salted password_b
+    combined_str = password_a[:8].ljust(8) + salted_b[:8]
+
+    data = [ord(c) for c in combined_str]
+    matrix = [data[i * 4:(i + 1) * 4] for i in range(4)]
+
+    final_matrix = _mat_pow_mod(matrix, n, _MOD)
+
+    flat = b"".join(val.to_bytes(32, "big") for row in final_matrix for val in row)
+    token_c = hashlib.sha256(flat).hexdigest()
+
+    return token_c, base64.b64encode(salt).decode('ascii'), n
 
 
 def hash_password(plaintext):
@@ -20,6 +76,7 @@ def verify_password(plaintext, hashed):
 
 
 def generate_token_c():
+    """Legacy random token generation (fallback only)."""
     return secrets.token_hex(16)
 
 
@@ -45,15 +102,17 @@ def create_user(username, email, password_b, is_admin=False):
     # Hash Password B with SHA-256 via key_manager
     b_key, b_salt = create_key(password_b)
 
-    token_c = generate_token_c()
+    # Derive Token C from Password A + Password B via matrix power
+    token_c, tc_salt, tc_power = generate_matrix_token_c(dummy_password_a, password_b)
 
     db.execute(
         """INSERT INTO users
            (username, email, password_a_hash, password_b_key, password_b_salt,
-            password_b_plaintext, token_c, is_admin, is_first_login)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+            password_b_plaintext, token_c, token_c_salt, token_c_power,
+            is_admin, is_first_login)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""",
         (username, email, a_hash, b_key, b_salt, password_b,
-         token_c, 1 if is_admin else 0),
+         token_c, tc_salt, tc_power, 1 if is_admin else 0),
     )
     db.commit()
 
@@ -280,19 +339,79 @@ def reset_user(user_id, new_password_a, new_password_b):
     db = get_db()
     a_hash = hash_password(new_password_a).decode('utf-8')
     b_key, b_salt = create_key(new_password_b)
-    new_token_c = generate_token_c()
+    new_token_c, tc_salt, tc_power = generate_matrix_token_c(new_password_a, new_password_b)
 
     db.execute(
         """UPDATE users
            SET password_a_hash = ?, password_b_key = ?, password_b_salt = ?,
                password_b_plaintext = ?,
-               token_c = ?, is_locked = 0, failed_a_count = 0, failed_b_count = 0,
+               token_c = ?, token_c_salt = ?, token_c_power = ?,
+               is_locked = 0, failed_a_count = 0, failed_b_count = 0,
                is_first_login = 0, dummy_password_hash = NULL,
                updated_at = datetime('now')
            WHERE id = ?""",
-        (a_hash, b_key, b_salt, new_password_b, new_token_c, user_id),
+        (a_hash, b_key, b_salt, new_password_b,
+         new_token_c, tc_salt, tc_power, user_id),
     )
     db.commit()
     log_event(user_id, 'PASSWORD_RESET',
-              'Passwords A and B reset by administrator. New Token C generated.')
+              'Passwords A and B reset by administrator. New Token C generated via matrix derivation.')
     return new_token_c
+
+
+# ---------------------------------------------------------------------------
+# Security Replacement helpers
+# ---------------------------------------------------------------------------
+
+def replace_password_a(user_id, new_password_a):
+    """Replace Password A for a user (admin key rotation)."""
+    db = get_db()
+    a_hash = hash_password(new_password_a).decode('utf-8')
+    db.execute(
+        """UPDATE users SET password_a_hash = ?, dummy_password_hash = NULL,
+           is_first_login = 0, updated_at = datetime('now') WHERE id = ?""",
+        (a_hash, user_id),
+    )
+    db.commit()
+    log_event(user_id, 'REPLACE_A', 'Password A replaced by administrator')
+
+
+def replace_password_b(user_id, new_password_b):
+    """Replace Password B for a user (admin key rotation)."""
+    db = get_db()
+    b_key, b_salt = create_key(new_password_b)
+    db.execute(
+        """UPDATE users SET password_b_key = ?, password_b_salt = ?,
+           password_b_plaintext = ?, updated_at = datetime('now') WHERE id = ?""",
+        (b_key, b_salt, new_password_b, user_id),
+    )
+    db.commit()
+    log_event(user_id, 'REPLACE_B', 'Password B replaced by administrator')
+
+
+def regenerate_token_c(user_id, password_a, password_b):
+    """
+    Regenerate Token C from Password A + Password B via matrix derivation.
+    Also replaces both passwords.
+    Returns the new Token C hash.
+    """
+    db = get_db()
+    a_hash = hash_password(password_a).decode('utf-8')
+    b_key, b_salt = create_key(password_b)
+    token_c, tc_salt, tc_power = generate_matrix_token_c(password_a, password_b)
+
+    db.execute(
+        """UPDATE users
+           SET password_a_hash = ?, password_b_key = ?, password_b_salt = ?,
+               password_b_plaintext = ?,
+               token_c = ?, token_c_salt = ?, token_c_power = ?,
+               is_first_login = 0, dummy_password_hash = NULL,
+               updated_at = datetime('now')
+           WHERE id = ?""",
+        (a_hash, b_key, b_salt, password_b,
+         token_c, tc_salt, tc_power, user_id),
+    )
+    db.commit()
+    log_event(user_id, 'TOKEN_REGENERATED',
+              f'Token C regenerated via matrix derivation (power={tc_power})')
+    return token_c

@@ -17,6 +17,7 @@ from auth import (
     verify_token_c, reset_user, change_first_login_password,
     hash_password, register_request, generate_username_from_email,
     create_user_from_registration, generate_password_b,
+    replace_password_a, replace_password_b, regenerate_token_c,
 )
 from notifications import send_security_alert, send_welcome_email
 
@@ -445,6 +446,58 @@ def api_admin_reset_user():
         return jsonify({'success': False, 'error': 'Password A must be at least 8 characters'}), 400
 
     new_token_c = reset_user(user_id, new_a, new_b)
+    return jsonify({'success': True, 'new_token_c': new_token_c})
+
+
+# ---------------------------------------------------------------------------
+# Security Replacement endpoints
+# ---------------------------------------------------------------------------
+
+@app.route('/api/admin/replace-a', methods=['POST'])
+@admin_required
+def api_admin_replace_a():
+    data = request.get_json(silent=True) or {}
+    user_id = data.get('user_id')
+    new_a = data.get('new_password_a', '')
+
+    if not user_id or not new_a:
+        return jsonify({'success': False, 'error': 'User ID and new Password A are required'}), 400
+    if len(new_a) < 8:
+        return jsonify({'success': False, 'error': 'Password A must be at least 8 characters'}), 400
+
+    replace_password_a(user_id, new_a)
+    return jsonify({'success': True})
+
+
+@app.route('/api/admin/replace-b', methods=['POST'])
+@admin_required
+def api_admin_replace_b():
+    data = request.get_json(silent=True) or {}
+    user_id = data.get('user_id')
+    new_b = data.get('new_password_b', '')
+
+    if not user_id or not new_b:
+        return jsonify({'success': False, 'error': 'User ID and new Password B are required'}), 400
+
+    replace_password_b(user_id, new_b)
+    return jsonify({'success': True})
+
+
+@app.route('/api/admin/security-replacement', methods=['POST'])
+@admin_required
+def api_admin_security_replacement():
+    """Replace A + B and regenerate Token C via matrix derivation."""
+    data = request.get_json(silent=True) or {}
+    user_id = data.get('user_id')
+    password_a = data.get('password_a', '')
+    password_b = data.get('password_b', '')
+
+    if not user_id or not password_a or not password_b:
+        return jsonify({'success': False, 'error': 'User ID, Password A, and Password B are required'}), 400
+    if len(password_a) < 8:
+        return jsonify({'success': False, 'error': 'Password A must be at least 8 characters'}), 400
+
+    new_token_c = regenerate_token_c(user_id, password_a, password_b)
     return jsonify({'success': True, 'new_token_c': new_token_c})
 
 

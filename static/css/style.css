@@ -178,21 +178,23 @@ body {
 .badge-warning { background: #fff3cd; color: #856404; }
 
 /* Dashboard */
+.dashboard { overflow: hidden; }
 .dashboard h2 { margin-bottom: 16px; }
 
 /* Tabs */
 .tabs {
     display: flex;
-    gap: 4px;
+    flex-wrap: wrap;
+    gap: 0;
     border-bottom: 2px solid var(--border);
     margin-bottom: 24px;
 }
 .tab {
-    padding: 10px 20px;
+    padding: 10px 16px;
     border: none;
     background: none;
     cursor: pointer;
-    font-size: .9rem;
+    font-size: .85rem;
     font-weight: 600;
     color: var(--text-muted);
     border-bottom: 2px solid transparent;
@@ -217,27 +219,36 @@ body {
 }
 
 /* Data tables */
+.table-wrap {
+    overflow-x: auto;
+    border-radius: var(--radius);
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+}
 .data-table {
     width: 100%;
     border-collapse: collapse;
     background: var(--card-bg);
     border-radius: var(--radius);
     overflow: hidden;
-    box-shadow: 0 1px 4px rgba(0,0,0,.06);
 }
 .data-table th {
     background: #f1f5f9;
-    padding: 12px 14px;
+    padding: 10px 10px;
     text-align: left;
-    font-size: .8rem;
+    font-size: .75rem;
     text-transform: uppercase;
     color: var(--text-muted);
     letter-spacing: .5px;
+    white-space: nowrap;
 }
 .data-table td {
-    padding: 12px 14px;
+    padding: 10px 10px;
     border-top: 1px solid var(--border);
-    font-size: .875rem;
+    font-size: .825rem;
+    white-space: nowrap;
+}
+.data-table td:last-child {
+    white-space: nowrap;
 }
 .data-table tr:hover td { background: #f8fafc; }
 

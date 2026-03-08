@@ -28,7 +28,8 @@
         <div id="regs-empty" style="display:none;">
             <p style="color: var(--text-muted);">No pending registration requests.</p>
         </div>
-        <table class="data-table" id="regs-table" style="display:none;">
+        <div class="table-wrap" id="regs-table" style="display:none;">
+        <table class="data-table">
             <thead>
                 <tr>
                     <th>Time</th>
@@ -38,6 +39,7 @@
             </thead>
             <tbody id="regs-body"></tbody>
         </table>
+        </div>
     </div>
 
     <!-- TICKETS TAB -->
@@ -49,7 +51,8 @@
         <div id="tickets-empty" style="display:none;">
             <p style="color: var(--text-muted);">No pending tickets.</p>
         </div>
-        <table class="data-table" id="tickets-table" style="display:none;">
+        <div class="table-wrap" id="tickets-table" style="display:none;">
+        <table class="data-table">
             <thead>
                 <tr>
                     <th>Time</th>
@@ -61,6 +64,7 @@
             </thead>
             <tbody id="tickets-body"></tbody>
         </table>
+        </div>
     </div>
 
     <!-- USERS TAB -->
@@ -69,6 +73,7 @@
             <h3>User Management</h3>
             <button class="btn btn-primary btn-sm" onclick="showCreateModal()">Create User</button>
         </div>
+        <div class="table-wrap">
         <table class="data-table">
             <thead>
                 <tr>
@@ -85,6 +90,7 @@
             </thead>
             <tbody id="users-body"></tbody>
         </table>
+        </div>
     </div>
 
     <!-- EVENTS TAB -->
@@ -102,8 +108,12 @@
                 <option value="RECOVERY">Recoveries</option>
                 <option value="USER_CREATED">New Users</option>
                 <option value="DUMMY_REUSE">Dummy Password Reuse</option>
+                <option value="REPLACE_A">Password A Replaced</option>
+                <option value="REPLACE_B">Password B Replaced</option>
+                <option value="TOKEN_REGENERATED">Token Regenerated</option>
             </select>
         </div>
+        <div class="table-wrap">
         <table class="data-table">
             <thead>
                 <tr>
@@ -116,6 +126,7 @@
             </thead>
             <tbody id="events-body"></tbody>
         </table>
+        </div>
     </div>
 
     <!-- RECOVERY TAB -->
@@ -252,6 +263,49 @@
         <div class="modal-actions">
             <button class="btn btn-outline" onclick="hideApproveModal()">Cancel</button>
             <button class="btn btn-primary" id="btn-approve" onclick="approveRegistration()">Approve & Create User</button>
+        </div>
+    </div>
+</div>
+<!-- SECURITY REPLACEMENT MODAL -->
+<div class="modal-overlay" id="security-modal" style="display:none;">
+    <div class="modal">
+        <h3>Security Replacement</h3>
+        <p class="auth-subtitle" id="security-user-label"></p>
+        <input type="hidden" id="security-user-id">
+
+        <div class="settings-section">
+            <h4>Replace Password A</h4>
+            <div class="form-group">
+                <label for="sec-new-a">New Password A</label>
+                <input type="password" id="sec-new-a" placeholder="Min 8 characters">
+            </div>
+            <button class="btn btn-sm btn-outline" onclick="replacePasswordA()">Replace A</button>
+            <div id="replace-a-result" style="display:none;"></div>
+        </div>
+
+        <div class="settings-section">
+            <h4>Replace Password B</h4>
+            <div class="form-group">
+                <label for="sec-new-b">New Password B</label>
+                <div style="display:flex;gap:8px;">
+                    <input type="text" id="sec-new-b" placeholder="Enter or generate" style="flex:1;">
+                    <button class="btn btn-sm btn-outline" onclick="generateNewPasswordB()">Generate</button>
+                </div>
+            </div>
+            <button class="btn btn-sm btn-outline" onclick="replacePasswordB()">Replace B</button>
+            <div id="replace-b-result" style="display:none;"></div>
+        </div>
+
+        <hr>
+        <div class="settings-section">
+            <h4>Regenerate Token C</h4>
+            <p class="auth-subtitle">Replaces Password A + B and derives a new Token C via matrix power encryption.</p>
+            <button class="btn btn-primary" onclick="securityReplacement()">Security Replacement</button>
+            <div id="security-result" style="display:none;"></div>
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn btn-outline" onclick="hideSecurityModal()">Close</button>
         </div>
     </div>
 </div>

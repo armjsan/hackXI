@@ -240,6 +240,7 @@ async function loadUsers() {
                 <td>${u.created_at}</td>
                 <td>
                     <button class="btn btn-sm btn-outline" onclick="viewUserEvents(${u.id})">Events</button>
+                    <button class="btn btn-sm btn-primary" onclick="showSecurityModal(${u.id}, '${esc(u.username)}')">Security</button>
                 </td>
             </tr>
         `).join('');
@@ -466,6 +467,128 @@ async function createUser() {
     }
 }
 
+// ---- Security Replacement ----
+
+function showSecurityModal(userId, username) {
+    document.getElementById('security-modal').style.display = 'flex';
+    document.getElementById('security-user-id').value = userId;
+    document.getElementById('security-user-label').textContent = 'User: ' + username;
+    document.getElementById('sec-new-a').value = '';
+    document.getElementById('sec-new-b').value = '';
+    document.getElementById('replace-a-result').style.display = 'none';
+    document.getElementById('replace-b-result').style.display = 'none';
+    document.getElementById('security-result').style.display = 'none';
+}
+
+function hideSecurityModal() {
+    document.getElementById('security-modal').style.display = 'none';
+}
+
+function generateNewPasswordB() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < 12; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    document.getElementById('sec-new-b').value = result;
+}
+
+async function replacePasswordA() {
+    const userId = document.getElementById('security-user-id').value;
+    const newA = document.getElementById('sec-new-a').value;
+    const resultEl = document.getElementById('replace-a-result');
+
+    if (!newA || newA.length < 8) {
+        showResult(resultEl, 'Password A must be at least 8 characters', true);
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/admin/replace-a', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: parseInt(userId), new_password_a: newA }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            showResult(resultEl, 'Password A replaced successfully', false);
+        } else {
+            showResult(resultEl, data.error, true);
+        }
+    } catch {
+        showResult(resultEl, 'Connection error', true);
+    }
+}
+
+async function replacePasswordB() {
+    const userId = document.getElementById('security-user-id').value;
+    const newB = document.getElementById('sec-new-b').value;
+    const resultEl = document.getElementById('replace-b-result');
+
+    if (!newB) {
+        showResult(resultEl, 'Password B is required', true);
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/admin/replace-b', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: parseInt(userId), new_password_b: newB }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            showResult(resultEl, 'Password B replaced successfully', false);
+        } else {
+            showResult(resultEl, data.error, true);
+        }
+    } catch {
+        showResult(resultEl, 'Connection error', true);
+    }
+}
+
+async function securityReplacement() {
+    const userId = document.getElementById('security-user-id').value;
+    const passA = document.getElementById('sec-new-a').value;
+    const passB = document.getElementById('sec-new-b').value;
+    const resultEl = document.getElementById('security-result');
+
+    if (!passA || !passB) {
+        showResult(resultEl, 'Both Password A and Password B are required', true);
+        return;
+    }
+    if (passA.length < 8) {
+        showResult(resultEl, 'Password A must be at least 8 characters', true);
+        return;
+    }
+
+    try {
+        const res = await fetch('/api/admin/security-replacement', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: parseInt(userId),
+                password_a: passA,
+                password_b: passB,
+            }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            resultEl.className = 'success-msg';
+            resultEl.innerHTML =
+                'Security replacement complete!<br>' +
+                '<strong>New Token C:</strong> ' + esc(data.new_token_c) + '<br>' +
+                '<em>Save this token - it will not be shown again.</em>';
+            resultEl.style.display = 'block';
+            loadUsers();
+        } else {
+            showResult(resultEl, data.error, true);
+        }
+    } catch {
+        showResult(resultEl, 'Connection error', true);
+    }
+}
+
 // ---- Admin Logout ----
 
 async function adminLogout() {
@@ -487,6 +610,7 @@ function badgeClass(type) {
     if (type === 'A_FAIL') return 'badge-warning';
     if (type === 'LOGIN_SUCCESS' || type === 'PASSWORD_CHANGED') return 'badge-active';
     if (type === 'USER_CREATED') return 'badge-warning';
+    if (type === 'REPLACE_A' || type === 'REPLACE_B' || type === 'TOKEN_REGENERATED') return 'badge-warning';
     return '';
 }
 
