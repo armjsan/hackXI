@@ -9,13 +9,16 @@ from database import (
     get_db, close_db, init_db, get_setting, set_setting,
     get_user_by_id, get_user_by_username, log_event,
     get_pending_tickets, acknowledge_ticket,
+    get_pending_registrations, get_registration_by_id,
+    approve_registration, reject_registration,
 )
 from auth import (
     create_user, verify_password_a, verify_password_b,
     verify_token_c, reset_user, change_first_login_password,
-    hash_password,
+    hash_password, register_request, generate_username_from_email,
+    create_user_from_registration, generate_password_b,
 )
-from notifications import send_security_alert
+from notifications import send_security_alert, send_welcome_email
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -59,6 +62,32 @@ def seed_admin_command(username, email, password_a, password_b):
         click.echo(f'Error: {e}')
 
 
+@app.cli.command('seed-test-user')
+@click.option('--username', default='testuser', help='Test username')
+@click.option('--email', default='test@tripleauth.local', help='Test email')
+@click.option('--password-a', default='testpass1', help='Test Password A')
+@click.option('--password-b', default='testverify', help='Test Password B')
+def seed_test_user_command(username, email, password_a, password_b):
+    try:
+        result = create_user(username, email, password_b)
+        # Override dummy password with specified password, clear first-login flag
+        db = get_db()
+        a_hash = hash_password(password_a).decode('utf-8')
+        user = get_user_by_username(username)
+        db.execute(
+            "UPDATE users SET password_a_hash = ?, is_first_login = 0 WHERE id = ?",
+            (a_hash, user['id']),
+        )
+        db.commit()
+        click.echo(f'Test user created successfully!')
+        click.echo(f'  Username:   {username}')
+        click.echo(f'  Password A: {password_a}')
+        click.echo(f'  Password B: {password_b}')
+        click.echo(f'  Token C:    {result["token_c"]}')
+    except Exception as e:
+        click.echo(f'Error: {e}')
+
+
 # ---------------------------------------------------------------------------
 # Decorators
 # ---------------------------------------------------------------------------
@@ -86,10 +115,15 @@ def admin_required(f):
 # ---------------------------------------------------------------------------
 
 USERNAME_RE = re.compile(r'^[a-zA-Z0-9_]{1,50}$')
+EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 
 
 def validate_username(username):
     return bool(USERNAME_RE.match(username))
+
+
+def validate_email(email):
+    return bool(EMAIL_RE.match(email))
 
 
 # ---------------------------------------------------------------------------
@@ -104,6 +138,11 @@ def index():
 @app.route('/login')
 def login():
     return render_template('login.html')
+
+
+@app.route('/register')
+def register_page():
+    return render_template('register.html')
 
 
 @app.route('/locked')
@@ -179,6 +218,42 @@ def api_verify_b():
     return jsonify({'success': False, 'error': result['error']}), 401
 
 
+@app.route('/api/auth/register', methods=['POST'])
+def api_register():
+    data = request.get_json(silent=True) or {}
+    email = data.get('email', '').strip()
+    password_a = data.get('password_a', '')
+
+    if not email or not password_a:
+        return jsonify({'success': False, 'error': 'Email and password are required'}), 400
+    if not validate_email(email):
+        return jsonify({'success': False, 'error': 'Please enter a valid email address'}), 400
+    if len(password_a) < 8:
+        return jsonify({'success': False, 'error': 'Password must be at least 8 characters'}), 400
+
+    # Check for existing pending registration with same email
+    db = get_db()
+    existing = db.execute(
+        "SELECT id FROM registration_requests WHERE email = ? AND status = 'pending'",
+        (email,),
+    ).fetchone()
+    if existing:
+        return jsonify({'success': False, 'error': 'A registration request for this email is already pending'}), 409
+
+    # Check if email already has an account
+    existing_user = db.execute(
+        "SELECT id FROM users WHERE email = ?", (email,)
+    ).fetchone()
+    if existing_user:
+        return jsonify({'success': False, 'error': 'An account with this email already exists'}), 409
+
+    reg_id = register_request(email, password_a)
+    return jsonify({
+        'success': True,
+        'message': 'Registration request submitted. An administrator will review your request.',
+    })
+
+
 @app.route('/api/auth/logout', methods=['POST'])
 def api_logout():
     session.clear()
@@ -228,6 +303,19 @@ def home():
         return redirect(url_for('change_password_page'))
     user = get_user_by_id(session['user_id'])
     return render_template('home.html', user=user)
+
+
+@app.route('/api/user/info')
+@login_required
+def api_user_info():
+    user = get_user_by_id(session['user_id'])
+    return jsonify({
+        'username': user['username'],
+        'email': user['email'],
+        'password_b_plaintext': user['password_b_plaintext'],
+        'is_admin': bool(user['is_admin']),
+        'created_at': user['created_at'],
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -307,7 +395,7 @@ def api_admin_events():
     query = """
         SELECT e.*, u.username
         FROM security_events e
-        JOIN users u ON u.id = e.user_id
+        LEFT JOIN users u ON u.id = e.user_id
         WHERE 1=1
     """
     params = []
@@ -399,6 +487,81 @@ def api_admin_tickets():
 @admin_required
 def api_admin_acknowledge_ticket(event_id):
     acknowledge_ticket(event_id)
+    return jsonify({'success': True})
+
+
+# ---------------------------------------------------------------------------
+# Registration request endpoints
+# ---------------------------------------------------------------------------
+
+@app.route('/api/admin/registrations')
+@admin_required
+def api_admin_registrations():
+    regs = get_pending_registrations()
+    return jsonify(regs)
+
+
+@app.route('/api/admin/registrations/<int:reg_id>/approve', methods=['POST'])
+@admin_required
+def api_admin_approve_registration(reg_id):
+    reg = get_registration_by_id(reg_id)
+    if not reg:
+        return jsonify({'success': False, 'error': 'Registration not found'}), 404
+    if reg['status'] != 'pending':
+        return jsonify({'success': False, 'error': 'Registration already processed'}), 400
+
+    data = request.get_json(silent=True) or {}
+    username = data.get('username', '').strip()
+    password_b = data.get('password_b', '').strip()
+
+    # Auto-generate username if not provided
+    if not username:
+        username = generate_username_from_email(reg['email'])
+    if not validate_username(username):
+        return jsonify({'success': False, 'error': 'Invalid username format'}), 400
+
+    # Auto-generate Password B if not provided
+    if not password_b:
+        password_b = generate_password_b()
+
+    # Check for duplicate username
+    if get_user_by_username(username):
+        return jsonify({'success': False, 'error': 'Username already exists'}), 409
+
+    try:
+        result = create_user_from_registration(
+            reg['email'], username, password_b, session['user_id']
+        )
+        approve_registration(reg_id, username, session['user_id'])
+
+        # Attempt to send welcome email (falls back to mock)
+        email_result = send_welcome_email(
+            reg['email'], username, result['dummy_password_a']
+        )
+
+        return jsonify({
+            'success': True,
+            'username': username,
+            'dummy_password_a': result['dummy_password_a'],
+            'password_b': password_b,
+            'token_c': result['token_c'],
+            'email_sent': email_result.get('sent', False),
+            'email_method': email_result.get('method', 'mock'),
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/registrations/<int:reg_id>/reject', methods=['POST'])
+@admin_required
+def api_admin_reject_registration(reg_id):
+    reg = get_registration_by_id(reg_id)
+    if not reg:
+        return jsonify({'success': False, 'error': 'Registration not found'}), 404
+    if reg['status'] != 'pending':
+        return jsonify({'success': False, 'error': 'Registration already processed'}), 400
+
+    reject_registration(reg_id, session['user_id'])
     return jsonify({'success': True})
 
 

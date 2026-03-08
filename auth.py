@@ -1,9 +1,10 @@
+import re
 import secrets
 import string
 import bcrypt
 from database import (
     get_db, get_setting, get_user_by_username, get_user_by_id,
-    log_event,
+    log_event, create_registration,
 )
 from key_manager import create_key, verify_key
 
@@ -31,8 +32,9 @@ def generate_dummy_password_a(length=12):
 def create_user(username, email, password_b, is_admin=False):
     """
     Create a new user with a dummy Password A and SHA-256 hashed Password B.
+    Stores Password B plaintext for masked display on user page.
 
-    Returns dict with keys: token_c, dummy_password_a
+    Returns dict with keys: token_c, dummy_password_a, password_b
     """
     db = get_db()
 
@@ -48,9 +50,10 @@ def create_user(username, email, password_b, is_admin=False):
     db.execute(
         """INSERT INTO users
            (username, email, password_a_hash, password_b_key, password_b_salt,
-            token_c, is_admin, is_first_login)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 1)""",
-        (username, email, a_hash, b_key, b_salt, token_c, 1 if is_admin else 0),
+            password_b_plaintext, token_c, is_admin, is_first_login)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+        (username, email, a_hash, b_key, b_salt, password_b,
+         token_c, 1 if is_admin else 0),
     )
     db.commit()
 
@@ -62,7 +65,7 @@ def create_user(username, email, password_b, is_admin=False):
         f'New user account created: {username} ({email})',
     )
 
-    return {'token_c': token_c, 'dummy_password_a': dummy_password_a}
+    return {'token_c': token_c, 'dummy_password_a': dummy_password_a, 'password_b': password_b}
 
 
 def verify_password_a(username, password_a, ip_address=None):
@@ -228,6 +231,51 @@ def verify_token_c(user_id, provided_token):
     return secrets.compare_digest(user['token_c'], provided_token)
 
 
+def generate_username_from_email(email):
+    """Derive a unique username from an email address."""
+    local = email.split('@')[0]
+    base = re.sub(r'[^a-zA-Z0-9_]', '_', local)[:40]
+    if not base:
+        base = 'user'
+    username = base
+    suffix = 1
+    while get_user_by_username(username):
+        username = f'{base}_{suffix}'
+        suffix += 1
+    return username
+
+
+def generate_password_b(length=12):
+    """Generate a random Password B string."""
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+
+def register_request(email, password_a):
+    """
+    Create a pending registration request.
+    Stores bcrypt hash of submitted Password A.
+    Returns the registration ID.
+    """
+    a_hash = hash_password(password_a).decode('utf-8')
+    return create_registration(email, a_hash)
+
+
+def create_user_from_registration(email, username, password_b, admin_id):
+    """
+    Create a user account from an approved registration.
+    Generates a dummy Password A for initial login.
+    Returns dict with user credentials for admin/email delivery.
+    """
+    result = create_user(username, email, password_b)
+    return {
+        'username': username,
+        'dummy_password_a': result['dummy_password_a'],
+        'password_b': password_b,
+        'token_c': result['token_c'],
+    }
+
+
 def reset_user(user_id, new_password_a, new_password_b):
     db = get_db()
     a_hash = hash_password(new_password_a).decode('utf-8')
@@ -237,11 +285,12 @@ def reset_user(user_id, new_password_a, new_password_b):
     db.execute(
         """UPDATE users
            SET password_a_hash = ?, password_b_key = ?, password_b_salt = ?,
+               password_b_plaintext = ?,
                token_c = ?, is_locked = 0, failed_a_count = 0, failed_b_count = 0,
                is_first_login = 0, dummy_password_hash = NULL,
                updated_at = datetime('now')
            WHERE id = ?""",
-        (a_hash, b_key, b_salt, new_token_c, user_id),
+        (a_hash, b_key, b_salt, new_password_b, new_token_c, user_id),
     )
     db.commit()
     log_event(user_id, 'PASSWORD_RESET',

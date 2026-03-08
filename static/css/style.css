@@ -301,3 +301,97 @@ hr {
     border-top: 1px solid var(--border);
     margin: 24px 0;
 }
+
+/* Auth footer (register/login links) */
+.auth-footer {
+    text-align: center;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+}
+.auth-footer a {
+    color: var(--primary-light);
+    text-decoration: none;
+    font-size: .875rem;
+    font-weight: 600;
+}
+.auth-footer a:hover {
+    text-decoration: underline;
+}
+
+/* User page */
+.user-page {
+    max-width: 600px;
+    margin: 32px auto;
+}
+
+.user-card {
+    background: var(--card-bg);
+    border-radius: var(--radius);
+    padding: 32px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 20px rgba(0,0,0,.08);
+}
+
+.user-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.user-card-header h2,
+.user-card-header h3 { margin: 0; }
+
+.user-info-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+}
+.info-row:last-child { border-bottom: none; }
+
+.info-label {
+    font-weight: 600;
+    font-size: .875rem;
+    color: var(--text-muted);
+}
+.info-value {
+    font-size: .9rem;
+}
+
+/* Password B display */
+.password-display {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #f1f5f9;
+    padding: 12px 16px;
+    border-radius: var(--radius);
+    border: 1.5px solid var(--border);
+}
+
+.password-field {
+    flex: 1;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 1rem;
+    letter-spacing: 2px;
+}
+
+.password-masked {
+    color: var(--text);
+}
+.password-plain {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+/* Danger button */
+.btn-danger { background: var(--danger); color: white; }
+.btn-danger:hover:not(:disabled) { background: #c82333; }
