@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Register - Triple Auth{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+    <h2>Request an Account</h2>
+    <p class="auth-subtitle">Submit your information for administrator review</p>
+
+    <div id="register-form-container">
+        <form id="register-form" onsubmit="return false;">
+            <div class="form-group">
+                <label for="reg-email">Email Address</label>
+                <input type="email" id="reg-email" required placeholder="you@example.com" autofocus>
+            </div>
+            <div class="form-group">
+                <label for="reg-password-a">Password</label>
+                <input type="password" id="reg-password-a" required placeholder="Min 8 characters">
+            </div>
+            <div class="form-group">
+                <label for="reg-confirm">Confirm Password</label>
+                <input type="password" id="reg-confirm" required>
+            </div>
+            <div id="error-reg" class="error-msg" style="display:none;"></div>
+            <button type="submit" class="btn btn-primary btn-full" id="btn-reg">Submit Request</button>
+        </form>
+    </div>
+
+    <div id="register-success" style="display:none;">
+        <div class="success-msg">
+            <strong>Registration request submitted!</strong><br>
+            An administrator will review your request. You will receive your login credentials via email once approved.
+        </div>
+    </div>
+
+    <div class="auth-footer">
+        <a href="/login">Already have an account? Sign in</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/register.js') }}"></script>
+{% endblock %}

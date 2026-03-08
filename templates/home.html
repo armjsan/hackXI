@@ -1,20 +1,101 @@
 {% extends "base.html" %}
-{% block title %}Home - Triple Auth{% endblock %}
+{% block title %}My Account - Triple Auth{% endblock %}
 
 {% block nav %}
+{% if user['is_admin'] %}
+<a href="/admin/dashboard" class="btn btn-sm btn-primary">Admin Dashboard</a>
+{% endif %}
 <button class="btn btn-sm btn-outline" onclick="logout()">Logout</button>
 {% endblock %}
 
 {% block content %}
-<div class="welcome-card">
-    <h2>Welcome, {{ user['username'] }}</h2>
-    <p>Your account is secured with Triple Authentication.</p>
-    <div class="status-badge badge-active">Authenticated</div>
+<div class="user-page">
+    <div class="user-card">
+        <div class="user-card-header">
+            <h2>My Account</h2>
+            <div class="status-badge badge-active">Authenticated</div>
+        </div>
+
+        <div class="user-info-grid">
+            <div class="info-row">
+                <span class="info-label">Username</span>
+                <span class="info-value" id="info-username">{{ user['username'] }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Email</span>
+                <span class="info-value" id="info-email">{{ user['email'] }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Account Created</span>
+                <span class="info-value">{{ user['created_at'] }}</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Role</span>
+                <span class="info-value">
+                    {% if user['is_admin'] %}
+                    <span class="status-badge badge-warning">Administrator</span>
+                    {% else %}
+                    <span class="status-badge badge-active">User</span>
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Password B Display -->
+    <!-- Security note: Password B plaintext is stored to meet the requirement of
+         displaying it on the user page. It is shown masked with a toggle to reveal.
+         In a production system, consider a one-time reveal or encrypted storage. -->
+    <div class="user-card">
+        <div class="user-card-header">
+            <h3>Verification Password (Password B)</h3>
+        </div>
+        <p class="auth-subtitle" style="margin-bottom:16px;">
+            This is your verification password provided by your administrator.
+            Keep it secure and do not share it.
+        </p>
+        <div class="password-display">
+            <div class="password-field">
+                <span id="password-b-masked" class="password-masked">
+                    {% if user['password_b_plaintext'] %}
+                    &#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;&#x2022;
+                    {% else %}
+                    <em style="color:var(--text-muted);">Not available</em>
+                    {% endif %}
+                </span>
+                <span id="password-b-plain" class="password-plain" style="display:none;">
+                    {{ user['password_b_plaintext'] or '' }}
+                </span>
+            </div>
+            {% if user['password_b_plaintext'] %}
+            <button class="btn btn-sm btn-outline" id="btn-toggle-b" onclick="togglePasswordB()">Show</button>
+            {% endif %}
+        </div>
+    </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+let passwordVisible = false;
+
+function togglePasswordB() {
+    const masked = document.getElementById('password-b-masked');
+    const plain = document.getElementById('password-b-plain');
+    const btn = document.getElementById('btn-toggle-b');
+
+    passwordVisible = !passwordVisible;
+    if (passwordVisible) {
+        masked.style.display = 'none';
+        plain.style.display = 'inline';
+        btn.textContent = 'Hide';
+    } else {
+        masked.style.display = 'inline';
+        plain.style.display = 'none';
+        btn.textContent = 'Show';
+    }
+}
+
 async function logout() {
     await fetch('/api/auth/logout', { method: 'POST' });
     window.location.href = '/login';

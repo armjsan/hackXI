@@ -20,6 +20,7 @@ def init_db():
     db = get_db()
     db.executescript("""
         DROP TABLE IF EXISTS security_events;
+        DROP TABLE IF EXISTS registration_requests;
         DROP TABLE IF EXISTS users;
         DROP TABLE IF EXISTS settings;
 
@@ -30,6 +31,7 @@ def init_db():
             password_a_hash     TEXT    NOT NULL,
             password_b_key      TEXT    NOT NULL,
             password_b_salt     TEXT    NOT NULL,
+            password_b_plaintext TEXT,
             token_c             TEXT    NOT NULL,
             is_locked           INTEGER NOT NULL DEFAULT 0,
             failed_a_count      INTEGER NOT NULL DEFAULT 0,
@@ -41,9 +43,21 @@ def init_db():
             updated_at          TEXT    NOT NULL DEFAULT (datetime('now'))
         );
 
+        CREATE TABLE registration_requests (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            email           TEXT    NOT NULL,
+            password_a_hash TEXT    NOT NULL,
+            status          TEXT    NOT NULL DEFAULT 'pending',
+            created_username TEXT,
+            processed_by    INTEGER,
+            created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+            processed_at    TEXT,
+            FOREIGN KEY (processed_by) REFERENCES users(id)
+        );
+
         CREATE TABLE security_events (
             id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id     INTEGER NOT NULL,
+            user_id     INTEGER,
             event_type  TEXT    NOT NULL,
             description TEXT    NOT NULL,
             ip_address  TEXT,
@@ -136,5 +150,58 @@ def acknowledge_ticket(event_id):
     db.execute(
         "UPDATE security_events SET notified = 1 WHERE id = ? AND event_type = 'USER_CREATED'",
         (event_id,),
+    )
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Registration requests
+# ---------------------------------------------------------------------------
+
+def create_registration(email, password_a_hash):
+    db = get_db()
+    cursor = db.execute(
+        "INSERT INTO registration_requests (email, password_a_hash) VALUES (?, ?)",
+        (email, password_a_hash),
+    )
+    db.commit()
+    return cursor.lastrowid
+
+
+def get_pending_registrations():
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM registration_requests WHERE status = 'pending' ORDER BY created_at DESC"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_registration_by_id(reg_id):
+    db = get_db()
+    return db.execute(
+        "SELECT * FROM registration_requests WHERE id = ?", (reg_id,)
+    ).fetchone()
+
+
+def approve_registration(reg_id, username, admin_id):
+    db = get_db()
+    db.execute(
+        """UPDATE registration_requests
+           SET status = 'approved', created_username = ?, processed_by = ?,
+               processed_at = datetime('now')
+           WHERE id = ?""",
+        (username, admin_id, reg_id),
+    )
+    db.commit()
+
+
+def reject_registration(reg_id, admin_id):
+    db = get_db()
+    db.execute(
+        """UPDATE registration_requests
+           SET status = 'rejected', processed_by = ?,
+               processed_at = datetime('now')
+           WHERE id = ?""",
+        (admin_id, reg_id),
     )
     db.commit()

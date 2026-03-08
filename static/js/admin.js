@@ -6,6 +6,7 @@ document.querySelectorAll('.tab').forEach(tab => {
         tab.classList.add('active');
         document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
 
+        if (tab.dataset.tab === 'registrations') loadRegistrations();
         if (tab.dataset.tab === 'tickets') loadTickets();
         if (tab.dataset.tab === 'users') loadUsers();
         if (tab.dataset.tab === 'events') loadEvents();
@@ -17,6 +18,142 @@ document.querySelectorAll('.tab').forEach(tab => {
 // Load initial data
 loadUsers();
 loadTicketCount();
+loadRegCount();
+
+// ---- Registrations ----
+
+async function loadRegistrations() {
+    try {
+        const res = await fetch('/api/admin/registrations');
+        const regs = await res.json();
+        const body = document.getElementById('regs-body');
+        const table = document.getElementById('regs-table');
+        const empty = document.getElementById('regs-empty');
+
+        if (regs.length === 0) {
+            table.style.display = 'none';
+            empty.style.display = 'block';
+        } else {
+            table.style.display = '';
+            empty.style.display = 'none';
+            body.innerHTML = regs.map(r => `
+                <tr>
+                    <td>${r.created_at}</td>
+                    <td>${esc(r.email)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="showApproveModal(${r.id}, '${esc(r.email)}')">Approve</button>
+                        <button class="btn btn-sm btn-danger" onclick="rejectRegistration(${r.id})">Reject</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        updateRegCount(regs.length);
+    } catch { }
+}
+
+async function loadRegCount() {
+    try {
+        const res = await fetch('/api/admin/registrations');
+        const regs = await res.json();
+        updateRegCount(regs.length);
+    } catch { }
+}
+
+function updateRegCount(count) {
+    const badge = document.getElementById('reg-count');
+    const regTab = document.querySelector('[data-tab="registrations"]');
+    if (count > 0) {
+        badge.textContent = count + ' pending';
+        badge.style.display = 'inline-block';
+        regTab.textContent = `Registrations (${count})`;
+    } else {
+        badge.style.display = 'none';
+        regTab.textContent = 'Registrations';
+    }
+}
+
+function showApproveModal(regId, email) {
+    document.getElementById('approve-modal').style.display = 'flex';
+    document.getElementById('approve-reg-id').value = regId;
+    document.getElementById('approve-email-label').textContent = 'Approving: ' + email;
+    document.getElementById('approve-username').value = '';
+    document.getElementById('approve-pass-b').value = '';
+    document.getElementById('approve-error').style.display = 'none';
+    document.getElementById('approve-success').style.display = 'none';
+    document.getElementById('btn-approve').disabled = false;
+}
+
+function hideApproveModal() {
+    document.getElementById('approve-modal').style.display = 'none';
+}
+
+function autoGenPasswordB() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < 12; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    document.getElementById('approve-pass-b').value = result;
+}
+
+async function approveRegistration() {
+    const regId = document.getElementById('approve-reg-id').value;
+    const errEl = document.getElementById('approve-error');
+    const successEl = document.getElementById('approve-success');
+    const btn = document.getElementById('btn-approve');
+    errEl.style.display = 'none';
+    successEl.style.display = 'none';
+    btn.disabled = true;
+
+    const body = {
+        username: document.getElementById('approve-username').value.trim(),
+        password_b: document.getElementById('approve-pass-b').value.trim(),
+    };
+
+    try {
+        const res = await fetch(`/api/admin/registrations/${regId}/approve`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+            const emailNote = data.email_sent
+                ? 'Welcome email sent to user.'
+                : '<strong>Email not configured.</strong> Deliver these credentials manually:';
+
+            successEl.className = 'success-msg';
+            successEl.innerHTML =
+                `User created!<br>${emailNote}<br>` +
+                `<strong>Username:</strong> ${esc(data.username)}<br>` +
+                `<strong>Temp Password A:</strong> ${esc(data.dummy_password_a)}<br>` +
+                `<strong>Password B:</strong> ${esc(data.password_b)}<br>` +
+                `<strong>Token C:</strong> ${esc(data.token_c)}<br>` +
+                `<em>Save these credentials - they will not be shown again.</em>`;
+            successEl.style.display = 'block';
+            loadRegistrations();
+            loadUsers();
+            loadTicketCount();
+        } else {
+            errEl.textContent = data.error;
+            errEl.style.display = 'block';
+            btn.disabled = false;
+        }
+    } catch {
+        errEl.textContent = 'Connection error';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+    }
+}
+
+async function rejectRegistration(regId) {
+    if (!confirm('Reject this registration request?')) return;
+    try {
+        await fetch(`/api/admin/registrations/${regId}/reject`, { method: 'POST' });
+        loadRegistrations();
+    } catch { }
+}
 
 // ---- Tickets ----
 
@@ -128,7 +265,7 @@ async function loadEvents(userId) {
             return `
                 <tr class="${rowClass}">
                     <td>${e.created_at}</td>
-                    <td>${esc(e.username)}</td>
+                    <td>${esc(e.username || '-')}</td>
                     <td><span class="status-badge ${badgeClass(e.event_type)}">${e.event_type}</span></td>
                     <td>${esc(e.description)}</td>
                     <td>${e.ip_address || '-'}</td>
@@ -339,6 +476,7 @@ async function adminLogout() {
 // ---- Helpers ----
 
 function esc(str) {
+    if (!str) return '';
     const d = document.createElement('div');
     d.textContent = str;
     return d.innerHTML;
