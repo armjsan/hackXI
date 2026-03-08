@@ -16,7 +16,7 @@ def _mat_mult_mod(A, B, mod):
                 result[i][j] = (result[i][j] + A[i][k] * B[k][j]) % mod
     return result
 
-
+#MATRIC LOGIC
 def _mat_pow_mod(matrix, power, mod):
     """Matrix exponentiation by squaring under modular arithmetic."""
     n = len(matrix)
